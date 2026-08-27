@@ -141,6 +141,34 @@ def test_build_updates_only_returns_changed_fields():
 
     assert build_updates(source, target, overwrite=True) == [("Description", "new")]
 
+
+def test_build_updates_can_disable_name_sync():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", name="new", description="same")
+    target = activity("g1", "2026-08-27T10:00:00+00:00", name="old", description="same")
+
+    assert build_updates(source, target, overwrite=True, sync_name=False) == []
+
+
+def test_build_updates_can_disable_description_sync():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", name="same", description="new")
+    target = activity("g1", "2026-08-27T10:00:00+00:00", name="same", description="old")
+
+    assert build_updates(source, target, overwrite=True, sync_description=False) == []
+
+
+def test_disabling_description_sync_also_disables_old_name_append():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", name="new", description="new")
+    target = activity("g1", "2026-08-27T10:00:00+00:00", name="old", description="")
+
+    assert build_updates(
+        source,
+        target,
+        overwrite=True,
+        sync_name=False,
+        sync_description=False,
+        add_old_garmin_name=True,
+    ) == []
+
 def test_build_updates_preserves_old_garmin_name_at_end_of_description():
     source = activity("s1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="Strava description")
     target = activity("g1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="")

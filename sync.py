@@ -72,6 +72,8 @@ def load_config(path: Path) -> dict[str, Any]:
     config.setdefault("limit", 10)
     config.setdefault("match_tolerance_minutes", 5)
     config.setdefault("ignore_sport_type", False)
+    config.setdefault("sync_name", True)
+    config.setdefault("sync_description", True)
     config.setdefault("add_old_garmin_name_to_description", False)
     config.setdefault("sync_event_type", False)
     config.setdefault("overwrite", True)
@@ -143,11 +145,13 @@ def build_updates(
     target: Activity,
     *,
     overwrite: bool,
+    sync_name: bool = True,
+    sync_description: bool = True,
     add_old_garmin_name: bool = False,
     sync_event_type: bool = False,
 ) -> list[tuple[str, str]]:
     updates: list[tuple[str, str]] = []
-    if overwrite or not target.name:
+    if sync_name and (overwrite or not target.name):
         if target.name != source.name:
             updates.append(("Name", source.name))
     description = target.description
@@ -157,7 +161,7 @@ def build_updates(
             if add_old_garmin_name
             else source.description
         )
-    if target.description != description:
+    if sync_description and target.description != description:
         updates.append(("Description", description))
     if sync_event_type:
         event_type = translate_event_type(source.workout_type, source.commute)
@@ -320,6 +324,8 @@ def sync(config: dict[str, Any]) -> int:
             source,
             target,
             overwrite=config["overwrite"],
+            sync_name=config.get("sync_name", True),
+            sync_description=config.get("sync_description", True),
             add_old_garmin_name=config.get("add_old_garmin_name_to_description", False),
             sync_event_type=config.get("sync_event_type", False),
         )

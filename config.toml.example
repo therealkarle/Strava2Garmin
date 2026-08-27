@@ -4,8 +4,10 @@ match_tolerance_minutes = 0
 # If true, match only by start time. Useful when Garmin and Strava use different sport keys.
 ignore_sport_type = true
 overwrite = true
+sync_name = true
+sync_description = true
+sync_event_type = true
 add_old_garmin_name_to_description = true
 # If true, copy Strava race/workout/long-run/commute classification to Garmin.
-sync_event_type = false
 startup_delay_minutes = 0
 log_level = "INFO"
