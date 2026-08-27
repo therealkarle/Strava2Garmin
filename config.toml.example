@@ -1,0 +1,6 @@
+# Copy to config.toml and adjust as needed.
+limit = 10
+match_tolerance_minutes = 5
+overwrite = true
+startup_delay_minutes = 0
+log_level = "INFO"
