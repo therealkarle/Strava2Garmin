@@ -107,7 +107,7 @@ def find_match(
     matches = [
         candidate
         for candidate in candidates
-        if ignore_sport_type or normalize_sport(candidate.sport) == normalize_sport(source.sport)
+        if (ignore_sport_type or normalize_sport(candidate.sport) == normalize_sport(source.sport))
         and abs(candidate.start_time - source.start_time) <= tolerance
     ]
     return matches[0] if len(matches) == 1 else None

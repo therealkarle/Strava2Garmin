@@ -34,8 +34,9 @@ def test_find_match_requires_unique_time_and_sport_match():
 def test_find_match_can_ignore_sport_type():
     source = activity("s1", "2026-08-27T10:00:00+00:00", sport="Ride")
     target = activity("g1", "2026-08-27T10:00:30+00:00", sport="road_biking")
+    unrelated = activity("g2", "2026-08-27T11:00:00+00:00", sport="hiking")
 
-    assert find_match(source, [target], tolerance_minutes=5, ignore_sport_type=True) == target
+    assert find_match(source, [target, unrelated], tolerance_minutes=5, ignore_sport_type=True) == target
 
 
 def test_cli_overrides_config_values():
