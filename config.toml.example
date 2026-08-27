@@ -5,5 +5,7 @@ match_tolerance_minutes = 0
 ignore_sport_type = true
 overwrite = true
 add_old_garmin_name_to_description = true
+# If true, copy Strava race/workout/long-run/commute classification to Garmin.
+sync_event_type = false
 startup_delay_minutes = 0
 log_level = "INFO"

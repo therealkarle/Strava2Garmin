@@ -25,6 +25,8 @@ py sync.py --match-tolerance 10 --log-level DEBUG
 
 A Strava activity is matched to exactly one Garmin activity by start time and sport. With `ignore_sport_type = true`, the sport is ignored and only the start time is used. Ambiguous matches are skipped. Use `--no-overwrite` to protect existing Garmin text.
 
+Set `sync_event_type = true` to optionally copy Strava classifications to Garmin: race → `Wettkampf`, workout and long run → `Training`, and Strava commute → `Verkehrsmittel`. Other Garmin event categories remain unchanged because Strava has no direct equivalent.
+
 ## Startup
 
 ```powershell

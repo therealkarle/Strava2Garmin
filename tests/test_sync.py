@@ -9,17 +9,21 @@ from sync import (
     load_config,
     load_strava_activities,
     set_activity_description,
+    set_activity_event_type,
     parse_args,
+    translate_event_type,
 )
 
 
-def activity(activity_id, start, sport="RUNNING", name="old", description="old"):
+def activity(activity_id, start, sport="RUNNING", name="old", description="old", workout_type=None, event_type=""):
     return Activity(
         id=activity_id,
         start_time=dt.datetime.fromisoformat(start),
         sport=sport,
         name=name,
         description=description,
+        workout_type=workout_type,
+        event_type=event_type,
     )
 
 
@@ -164,3 +168,41 @@ def test_old_garmin_name_takes_priority_over_description_limit():
 
 def test_active_config_enables_old_garmin_name_append():
     assert load_config(Path("config.toml"))["add_old_garmin_name_to_description"] is True
+
+
+def test_translate_strava_event_types_to_garmin_categories():
+    assert translate_event_type(1) == "Wettkampf"
+    assert translate_event_type(2) == "Training"
+    assert translate_event_type(3) == "Training"
+    assert translate_event_type(None) is None
+    assert translate_event_type(None, True) == "Verkehrsmittel"
+
+
+def test_set_activity_event_type_uses_garmin_event_type_payload():
+    payload = {}
+
+    class Client:
+        def put(self, *args, **kwargs):
+            payload.update(kwargs["json"])
+
+    class Garmin:
+        client = Client()
+        garmin_connect_activity = "/activity-service/activity"
+
+    set_activity_event_type(Garmin(), "42", "Verkehrsmittel")
+    assert payload == {
+        "activityId": "42",
+        "eventTypeDTO": {"typeId": 5, "typeKey": "transportation"},
+    }
+
+
+def test_build_updates_can_optionally_sync_event_type():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", workout_type=1)
+    target = activity("g1", "2026-08-27T10:00:00+00:00", event_type="training")
+    assert build_updates(source, target, overwrite=False, sync_event_type=True) == [("EventType", "Wettkampf")]
+
+
+def test_build_updates_skips_matching_garmin_event_type():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", workout_type=3)
+    target = activity("g1", "2026-08-27T10:00:00+00:00", event_type="training")
+    assert build_updates(source, target, overwrite=False, sync_event_type=True) == []

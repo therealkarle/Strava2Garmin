@@ -27,6 +27,11 @@ STRAVA_TOKEN_FILE = APP_DIR / "strava-token.json"
 GARMIN_TOKEN_DIR = APP_DIR / "garmin-tokens"
 STRAVA_API = "https://www.strava.com/api/v3"
 GARMIN_DESCRIPTION_MAX_LENGTH = 2000
+GARMIN_EVENT_TYPES = {
+    "Wettkampf": {"typeId": 1, "typeKey": "race"},
+    "Training": {"typeId": 4, "typeKey": "training"},
+    "Verkehrsmittel": {"typeId": 5, "typeKey": "transportation"},
+}
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,9 @@ class Activity:
     sport: str
     name: str
     description: str
+    workout_type: int | None = None
+    commute: bool = False
+    event_type: str = ""
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -65,6 +73,7 @@ def load_config(path: Path) -> dict[str, Any]:
     config.setdefault("match_tolerance_minutes", 5)
     config.setdefault("ignore_sport_type", False)
     config.setdefault("add_old_garmin_name_to_description", False)
+    config.setdefault("sync_event_type", False)
     config.setdefault("overwrite", True)
     config.setdefault("startup_delay_minutes", 0)
     config.setdefault("log_level", "INFO")
@@ -135,19 +144,25 @@ def build_updates(
     *,
     overwrite: bool,
     add_old_garmin_name: bool = False,
+    sync_event_type: bool = False,
 ) -> list[tuple[str, str]]:
     updates: list[tuple[str, str]] = []
     if overwrite or not target.name:
         if target.name != source.name:
             updates.append(("Name", source.name))
+    description = target.description
     if overwrite or not target.description:
         description = (
             _description_with_old_name(source.description, target.name)
             if add_old_garmin_name
             else source.description
         )
-        if target.description != description:
-            updates.append(("Description", description))
+    if target.description != description:
+        updates.append(("Description", description))
+    if sync_event_type:
+        event_type = translate_event_type(source.workout_type, source.commute)
+        if event_type and target.event_type != GARMIN_EVENT_TYPES[event_type]["typeKey"]:
+            updates.append(("EventType", event_type))
     return updates
 
 
@@ -165,6 +180,25 @@ def set_activity_description(garmin: Any, activity_id: str, description: str) ->
         "connectapi",
         f"{garmin.garmin_connect_activity}/{activity_id}",
         json={"activityId": activity_id, "description": description},
+        api=True,
+    )
+
+
+def translate_event_type(workout_type: int | None, commute: bool = False) -> str | None:
+    if commute:
+        return "Verkehrsmittel"
+    return {1: "Wettkampf", 2: "Training", 3: "Training"}.get(workout_type)
+
+
+def set_activity_event_type(garmin: Any, activity_id: str, event_type: str) -> Any:
+    try:
+        event_type_dto = GARMIN_EVENT_TYPES[event_type]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported Garmin event type: {event_type}") from exc
+    return garmin.client.put(
+        "connectapi",
+        f"{garmin.garmin_connect_activity}/{activity_id}",
+        json={"activityId": activity_id, "eventTypeDTO": event_type_dto},
         api=True,
     )
 
@@ -230,6 +264,8 @@ def load_strava_activities(limit: int) -> list[Activity]:
                 or _json_request(f"{STRAVA_API}/activities/{row['id']}", token=token).get("description")
                 or ""
             ),
+            workout_type=row.get("workout_type"),
+            commute=bool(row.get("commute")),
         )
         for row in rows[:limit]
     ]
@@ -255,6 +291,7 @@ def load_garmin_activities(limit: int) -> tuple[Any, list[Activity]]:
             sport=((row.get("activityType") or {}).get("typeKey") or ""),
             name=row.get("activityName") or "",
             description=row.get("description") or "",
+            event_type=((row.get("eventType") or {}).get("typeKey") or ""),
         )
         for row in rows
         if row.get("activityId") is not None and (row.get("startTimeGMT") or row.get("startTimeLocal"))
@@ -284,6 +321,7 @@ def sync(config: dict[str, Any]) -> int:
             target,
             overwrite=config["overwrite"],
             add_old_garmin_name=config.get("add_old_garmin_name_to_description", False),
+            sync_event_type=config.get("sync_event_type", False),
         )
         if not updates:
             logging.info("Unchanged: %s", source.name)
@@ -293,8 +331,10 @@ def sync(config: dict[str, Any]) -> int:
             for label, value in updates:
                 if label == "Name":
                     garmin.set_activity_name(target.id, value)
-                else:
+                elif label == "Description":
                     set_activity_description(garmin, target.id, value)
+                else:
+                    set_activity_event_type(garmin, target.id, value)
         changed += 1
     return changed
 
