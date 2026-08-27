@@ -1,10 +1,12 @@
 import datetime as dt
+from pathlib import Path
 
 from sync import (
     Activity,
     apply_overrides,
     build_updates,
     find_match,
+    load_config,
     load_strava_activities,
     set_activity_description,
     parse_args,
@@ -134,3 +136,31 @@ def test_build_updates_only_returns_changed_fields():
     target = activity("g1", "2026-08-27T10:00:30+00:00", name="Same", description="old")
 
     assert build_updates(source, target, overwrite=True) == [("Beschreibung", "new")]
+
+def test_build_updates_preserves_old_garmin_name_at_end_of_description():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="Strava description")
+    target = activity("g1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="")
+
+    assert build_updates(
+        source,
+        target,
+        overwrite=True,
+        add_old_garmin_name=True,
+    ) == [("Beschreibung", "Strava description\n\nOldGarminName: Old Garmin name")]
+
+def test_old_garmin_name_takes_priority_over_description_limit():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="x" * 2000)
+    target = activity("g1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="")
+
+    description = build_updates(
+        source,
+        target,
+        overwrite=True,
+        add_old_garmin_name=True,
+    )[0][1]
+
+    assert description.endswith("\n\nOldGarminName: Old Garmin name")
+    assert len(description.encode("utf-16-le")) // 2 == 2000
+
+def test_active_config_enables_old_garmin_name_append():
+    assert load_config(Path("config.toml"))["add_old_garmin_name_to_description"] is True

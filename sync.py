@@ -47,6 +47,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     overwrite.add_argument("--overwrite", action="store_true", default=None)
     overwrite.add_argument("--no-overwrite", action="store_false", dest="overwrite")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--add-old-garmin-name-to-description", action="store_true", default=None)
     parser.add_argument("--startup-delay", type=int, dest="startup_delay_minutes")
     parser.add_argument("--log-level", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     return parser.parse_args(argv)
@@ -63,6 +64,7 @@ def load_config(path: Path) -> dict[str, Any]:
     config.setdefault("limit", 10)
     config.setdefault("match_tolerance_minutes", 5)
     config.setdefault("ignore_sport_type", False)
+    config.setdefault("add_old_garmin_name_to_description", False)
     config.setdefault("overwrite", True)
     config.setdefault("startup_delay_minutes", 0)
     config.setdefault("log_level", "INFO")
@@ -76,7 +78,7 @@ def load_config(path: Path) -> dict[str, Any]:
 
 def apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     result = dict(config)
-    for key in ("limit", "match_tolerance_minutes", "overwrite", "startup_delay_minutes", "log_level"):
+    for key in ("limit", "match_tolerance_minutes", "overwrite", "startup_delay_minutes", "log_level", "add_old_garmin_name_to_description"):
         value = getattr(args, key, None)
         if value is not None:
             result[key] = value
@@ -114,14 +116,38 @@ def find_match(
     return matches[0] if len(matches) == 1 else None
 
 
-def build_updates(source: Activity, target: Activity, *, overwrite: bool) -> list[tuple[str, str]]:
+def _description_with_old_name(description: str, old_name: str) -> str:
+    suffix = f"\n\nOldGarminName: {old_name}"
+    available = GARMIN_DESCRIPTION_MAX_LENGTH - len(suffix.encode("utf-16-le")) // 2
+    units = 0
+    prefix = []
+    for char in description:
+        char_units = 2 if ord(char) > 0xFFFF else 1
+        if units + char_units > max(available, 0):
+            break
+        prefix.append(char)
+        units += char_units
+    return "".join(prefix) + suffix
+
+def build_updates(
+    source: Activity,
+    target: Activity,
+    *,
+    overwrite: bool,
+    add_old_garmin_name: bool = False,
+) -> list[tuple[str, str]]:
     updates: list[tuple[str, str]] = []
     if overwrite or not target.name:
         if target.name != source.name:
             updates.append(("Name", source.name))
     if overwrite or not target.description:
-        if target.description != source.description:
-            updates.append(("Beschreibung", source.description))
+        description = (
+            _description_with_old_name(source.description, target.name)
+            if add_old_garmin_name
+            else source.description
+        )
+        if target.description != description:
+            updates.append(("Beschreibung", description))
     return updates
 
 
@@ -253,7 +279,12 @@ def sync(config: dict[str, Any]) -> int:
         if target is None:
             logging.warning("Keine eindeutige Garmin-Aktivität für Strava %s (%s).", source.id, source.name)
             continue
-        updates = build_updates(source, target, overwrite=config["overwrite"])
+        updates = build_updates(
+            source,
+            target,
+            overwrite=config["overwrite"],
+            add_old_garmin_name=config.get("add_old_garmin_name_to_description", False),
+        )
         if not updates:
             logging.info("Unverändert: %s", source.name)
             continue

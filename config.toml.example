@@ -4,5 +4,6 @@ match_tolerance_minutes = 0
 # If true, match only by start time. Useful when Garmin and Strava use different sport keys.
 ignore_sport_type = true
 overwrite = true
+add_old_garmin_name_to_description = true
 startup_delay_minutes = 0
 log_level = "INFO"
