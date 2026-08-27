@@ -23,7 +23,7 @@ py sync.py --limit 5
 py sync.py --match-tolerance 10 --log-level DEBUG
 ```
 
-Die Strava-Aktivität wird anhand von Startzeit und Sportart genau einer Garmin-Aktivität zugeordnet. Mehrdeutige Treffer werden übersprungen. Mit `--no-overwrite` werden vorhandene Garmin-Texte geschützt.
+Die Strava-Aktivität wird anhand von Startzeit und Sportart genau einer Garmin-Aktivität zugeordnet. Mit `ignore_sport_type = true` wird die Sportart ignoriert und nur die Startzeit verwendet. Mehrdeutige Treffer werden übersprungen. Mit `--no-overwrite` werden vorhandene Garmin-Texte geschützt.
 
 ## Autostart
 

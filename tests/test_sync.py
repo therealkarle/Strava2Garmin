@@ -31,6 +31,13 @@ def test_find_match_requires_unique_time_and_sport_match():
     assert find_match(source, candidates[:1], tolerance_minutes=5).id == "g1"
 
 
+def test_find_match_can_ignore_sport_type():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", sport="Ride")
+    target = activity("g1", "2026-08-27T10:00:30+00:00", sport="road_biking")
+
+    assert find_match(source, [target], tolerance_minutes=5, ignore_sport_type=True) == target
+
+
 def test_cli_overrides_config_values():
     config = {
         "limit": 10,

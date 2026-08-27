@@ -61,6 +61,7 @@ def load_config(path: Path) -> dict[str, Any]:
         raise RuntimeError(f"Config-Datei nicht gefunden: {path}") from exc
     config.setdefault("limit", 10)
     config.setdefault("match_tolerance_minutes", 5)
+    config.setdefault("ignore_sport_type", False)
     config.setdefault("overwrite", True)
     config.setdefault("startup_delay_minutes", 0)
     config.setdefault("log_level", "INFO")
@@ -95,12 +96,18 @@ def normalize_sport(value: str | None) -> str:
     return aliases.get(value, value)
 
 
-def find_match(source: Activity, candidates: list[Activity], tolerance_minutes: int) -> Activity | None:
+def find_match(
+    source: Activity,
+    candidates: list[Activity],
+    tolerance_minutes: int,
+    *,
+    ignore_sport_type: bool = False,
+) -> Activity | None:
     tolerance = dt.timedelta(minutes=tolerance_minutes)
     matches = [
         candidate
         for candidate in candidates
-        if normalize_sport(candidate.sport) == normalize_sport(source.sport)
+        if ignore_sport_type or normalize_sport(candidate.sport) == normalize_sport(source.sport)
         and abs(candidate.start_time - source.start_time) <= tolerance
     ]
     return matches[0] if len(matches) == 1 else None
@@ -214,7 +221,12 @@ def sync(config: dict[str, Any]) -> int:
     garmin, targets = load_garmin_activities(config["limit"])
     changed = 0
     for source in strava:
-        target = find_match(source, targets, config["match_tolerance_minutes"])
+        target = find_match(
+            source,
+            targets,
+            config["match_tolerance_minutes"],
+            ignore_sport_type=config["ignore_sport_type"],
+        )
         if target is None:
             logging.warning("Keine eindeutige Garmin-Aktivität für Strava %s (%s).", source.id, source.name)
             continue
