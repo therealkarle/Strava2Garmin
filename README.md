@@ -1,10 +1,10 @@
 # Strava2Garmin
 
-Überträgt Namen und Beschreibungen der letzten Strava-Aktivitäten auf die passenden, bereits vorhandenen Garmin-Aktivitäten.
+Copies names and descriptions from recent Strava activities to the matching existing Garmin activities.
 
-## Einrichtung
+## Setup
 
-Voraussetzung ist Python 3.11+.
+Python 3.11+ is required.
 
 ```powershell
 py -m pip install -r requirements.txt
@@ -13,9 +13,9 @@ py setup_strava.py
 py setup_garmin.py
 ```
 
-Für Strava wird eine API-Anwendung mit `http://localhost:8765/callback` als Callback-URL benötigt. Das Garmin-Script fragt den MFA-Code bei Bedarf interaktiv ab.
+Strava requires an API application with `http://localhost:8765/callback` configured as the callback URL. The Garmin script prompts for an MFA code when needed.
 
-## Manueller Lauf
+## Manual run
 
 ```powershell
 py sync.py --dry-run
@@ -23,12 +23,12 @@ py sync.py --limit 5
 py sync.py --match-tolerance 10 --log-level DEBUG
 ```
 
-Die Strava-Aktivität wird anhand von Startzeit und Sportart genau einer Garmin-Aktivität zugeordnet. Mit `ignore_sport_type = true` wird die Sportart ignoriert und nur die Startzeit verwendet. Mehrdeutige Treffer werden übersprungen. Mit `--no-overwrite` werden vorhandene Garmin-Texte geschützt.
+A Strava activity is matched to exactly one Garmin activity by start time and sport. With `ignore_sport_type = true`, the sport is ignored and only the start time is used. Ambiguous matches are skipped. Use `--no-overwrite` to protect existing Garmin text.
 
-## Autostart
+## Startup
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_startup.ps1
 ```
 
-Die Aufgabe startet beim Windows-Login; `startup_delay_minutes` aus `config.toml` verzögert den eigentlichen Sync.
+The task starts when Windows logs in; `startup_delay_minutes` in `config.toml` delays the actual sync.

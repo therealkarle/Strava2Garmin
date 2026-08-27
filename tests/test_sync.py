@@ -135,7 +135,7 @@ def test_build_updates_only_returns_changed_fields():
     source = activity("s1", "2026-08-27T10:00:00+00:00", name="Same", description="new")
     target = activity("g1", "2026-08-27T10:00:30+00:00", name="Same", description="old")
 
-    assert build_updates(source, target, overwrite=True) == [("Beschreibung", "new")]
+    assert build_updates(source, target, overwrite=True) == [("Description", "new")]
 
 def test_build_updates_preserves_old_garmin_name_at_end_of_description():
     source = activity("s1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="Strava description")
@@ -146,7 +146,7 @@ def test_build_updates_preserves_old_garmin_name_at_end_of_description():
         target,
         overwrite=True,
         add_old_garmin_name=True,
-    ) == [("Beschreibung", "Strava description\n\nOldGarminName: Old Garmin name")]
+    ) == [("Description", "Strava description\n\nOldGarminName: Old Garmin name")]
 
 def test_old_garmin_name_takes_priority_over_description_limit():
     source = activity("s1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="x" * 2000)

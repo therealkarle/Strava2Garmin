@@ -17,10 +17,10 @@ REDIRECT_URI = "http://localhost:8765/callback"
 
 
 def main() -> None:
-    client_id = input("Strava Client-ID: ").strip()
+    client_id = input("Strava client ID: ").strip()
     client_secret = input("Strava Client-Secret: ").strip()
     if not client_id or not client_secret:
-        raise SystemExit("Client-ID und Client-Secret dürfen nicht leer sein.")
+        raise SystemExit("Client ID and client secret must not be empty.")
     state = secrets.token_urlsafe(24)
     result: dict[str, str] = {}
 
@@ -36,7 +36,7 @@ def main() -> None:
             result["code"] = query.get("code", [""])[0]
             self.send_response(200)
             self.end_headers()
-            self.wfile.write("Strava-Anmeldung erfolgreich. Dieses Fenster kann geschlossen werden.".encode())
+            self.wfile.write("Strava login successful. You can close this window.".encode())
 
         def log_message(self, *_args: object) -> None:
             return
@@ -44,13 +44,13 @@ def main() -> None:
     params = urllib.parse.urlencode(
         {"client_id": client_id, "redirect_uri": REDIRECT_URI, "response_type": "code", "approval_prompt": "auto", "scope": "read,activity:read_all", "state": state}
     )
-    print("Browser wird geöffnet. Falls nicht, diese URL öffnen:")
+    print("Opening browser. If it does not open, visit this URL:")
     url = f"https://www.strava.com/oauth/authorize?{params}"
     print(url)
     webbrowser.open(url)
     HTTPServer(("localhost", 8765), Callback).handle_request()
     if not result.get("code"):
-        raise SystemExit("Kein OAuth-Code empfangen.")
+        raise SystemExit("No OAuth code received.")
     form = urllib.parse.urlencode({"client_id": client_id, "client_secret": client_secret, "code": result["code"], "grant_type": "authorization_code"}).encode()
     request = urllib.request.Request("https://www.strava.com/oauth/token", data=form, method="POST")
     with urllib.request.urlopen(request, timeout=30) as response:
@@ -58,7 +58,7 @@ def main() -> None:
     APP_DIR.mkdir(parents=True, exist_ok=True)
     token.update({"client_id": client_id, "client_secret": client_secret})
     TOKEN_FILE.write_text(json.dumps(token, indent=2), encoding="utf-8")
-    print(f"Strava-Token gespeichert: {TOKEN_FILE}")
+    print(f"Strava token saved: {TOKEN_FILE}")
 
 
 if __name__ == "__main__":

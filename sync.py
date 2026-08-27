@@ -55,12 +55,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def load_config(path: Path) -> dict[str, Any]:
     if tomllib is None:
-        raise RuntimeError("Python 3.11 oder neuer wird benötigt.")
+        raise RuntimeError("Python 3.11 or newer is required.")
     try:
         with path.open("rb") as handle:
             config = tomllib.load(handle)
     except FileNotFoundError as exc:
-        raise RuntimeError(f"Config-Datei nicht gefunden: {path}") from exc
+        raise RuntimeError(f"Config file not found: {path}") from exc
     config.setdefault("limit", 10)
     config.setdefault("match_tolerance_minutes", 5)
     config.setdefault("ignore_sport_type", False)
@@ -70,9 +70,9 @@ def load_config(path: Path) -> dict[str, Any]:
     config.setdefault("log_level", "INFO")
     config["dry_run"] = False
     if not isinstance(config["limit"], int) or config["limit"] < 1:
-        raise RuntimeError("limit muss eine positive Ganzzahl sein.")
+        raise RuntimeError("limit must be a positive integer.")
     if config["match_tolerance_minutes"] < 0:
-        raise RuntimeError("match_tolerance_minutes darf nicht negativ sein.")
+        raise RuntimeError("match_tolerance_minutes must not be negative.")
     return config
 
 
@@ -84,7 +84,7 @@ def apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> dict[st
             result[key] = value
     result["dry_run"] = bool(args.dry_run)
     if result["limit"] < 1 or result["match_tolerance_minutes"] < 0:
-        raise ValueError("limit muss positiv sein und match_tolerance_minutes darf nicht negativ sein.")
+        raise ValueError("limit must be positive and match_tolerance_minutes must not be negative.")
     return result
 
 
@@ -147,7 +147,7 @@ def build_updates(
             else source.description
         )
         if target.description != description:
-            updates.append(("Beschreibung", description))
+            updates.append(("Description", description))
     return updates
 
 
@@ -178,19 +178,19 @@ def _json_request(url: str, *, token: str, method: str = "GET", data: bytes | No
             return json.load(response)
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
-            raise RuntimeError("Strava-Token ist ungültig oder abgelaufen; setup_strava.py erneut ausführen.") from exc
+            raise RuntimeError("Strava token is invalid or expired; run setup_strava.py again.") from exc
         if exc.code == 429:
-            raise RuntimeError("Strava-Rate-Limit erreicht; später erneut versuchen.") from exc
-        raise RuntimeError(f"Strava API-Fehler HTTP {exc.code}") from exc
+            raise RuntimeError("Strava rate limit reached; try again later.") from exc
+        raise RuntimeError(f"Strava API error HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"Strava-Netzwerkfehler: {exc.reason}") from exc
+        raise RuntimeError(f"Strava network error: {exc.reason}") from exc
 
 
 def _strava_token() -> str:
     try:
         token = json.loads(STRAVA_TOKEN_FILE.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError) as exc:
-        raise RuntimeError("Strava ist nicht eingerichtet; zuerst setup_strava.py ausführen.") from exc
+        raise RuntimeError("Strava is not configured; run setup_strava.py first.") from exc
     if token.get("expires_at", 0) <= int(time.time()) and token.get("refresh_token"):
         form = urllib.parse.urlencode(
             {
@@ -205,14 +205,14 @@ def _strava_token() -> str:
             with urllib.request.urlopen(request, timeout=30) as response:
                 refreshed = json.load(response)
         except urllib.error.HTTPError as exc:
-            raise RuntimeError("Strava-Token konnte nicht erneuert werden; setup_strava.py erneut ausführen.") from exc
+            raise RuntimeError("Strava token could not be refreshed; run setup_strava.py again.") from exc
         refreshed.update({"client_id": token.get("client_id"), "client_secret": token.get("client_secret")})
         STRAVA_TOKEN_FILE.write_text(json.dumps(refreshed, indent=2), encoding="utf-8")
         token = refreshed
     try:
         return token["access_token"]
     except KeyError as exc:
-        raise RuntimeError("Strava-Token ist unvollständig; setup_strava.py erneut ausführen.") from exc
+        raise RuntimeError("Strava token is incomplete; run setup_strava.py again.") from exc
 
 
 def load_strava_activities(limit: int) -> list[Activity]:
@@ -239,15 +239,15 @@ def load_garmin_activities(limit: int) -> tuple[Any, list[Activity]]:
     try:
         from garminconnect import Garmin
     except ImportError as exc:
-        raise RuntimeError("python-garminconnect fehlt; pip install -r requirements.txt ausführen.") from exc
+        raise RuntimeError("python-garminconnect is missing; run pip install -r requirements.txt.") from exc
     if not GARMIN_TOKEN_DIR.exists():
-        raise RuntimeError("Garmin ist nicht eingerichtet; zuerst setup_garmin.py ausführen.")
+        raise RuntimeError("Garmin is not configured; run setup_garmin.py first.")
     client = Garmin()
     try:
         client.login(tokenstore=str(GARMIN_TOKEN_DIR))
         rows = client.get_activities(0, limit)
     except Exception as exc:
-        raise RuntimeError("Garmin-Login/API fehlgeschlagen; setup_garmin.py erneut ausführen oder später versuchen.") from exc
+        raise RuntimeError("Garmin login/API failed; run setup_garmin.py again or try later.") from exc
     activities = [
         Activity(
             id=str(row["activityId"]),
@@ -264,7 +264,7 @@ def load_garmin_activities(limit: int) -> tuple[Any, list[Activity]]:
 
 def sync(config: dict[str, Any]) -> int:
     if config["startup_delay_minutes"]:
-        logging.info("Warte %s Minuten vor dem Start.", config["startup_delay_minutes"])
+        logging.info("Waiting %s minutes before starting.", config["startup_delay_minutes"])
         time.sleep(config["startup_delay_minutes"] * 60)
     strava = load_strava_activities(config["limit"])
     garmin, targets = load_garmin_activities(config["limit"])
@@ -277,7 +277,7 @@ def sync(config: dict[str, Any]) -> int:
             ignore_sport_type=config["ignore_sport_type"],
         )
         if target is None:
-            logging.warning("Keine eindeutige Garmin-Aktivität für Strava %s (%s).", source.id, source.name)
+            logging.warning("No unique Garmin activity found for Strava %s (%s).", source.id, source.name)
             continue
         updates = build_updates(
             source,
@@ -286,7 +286,7 @@ def sync(config: dict[str, Any]) -> int:
             add_old_garmin_name=config.get("add_old_garmin_name_to_description", False),
         )
         if not updates:
-            logging.info("Unverändert: %s", source.name)
+            logging.info("Unchanged: %s", source.name)
             continue
         logging.info("%s -> Garmin %s: %s", source.name, target.id, ", ".join(label for label, _ in updates))
         if not config["dry_run"]:
@@ -305,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
         config = apply_overrides(load_config(args.config), args)
         logging.basicConfig(level=getattr(logging, config["log_level"]), format="%(asctime)s %(levelname)s %(message)s")
         changed = sync(config)
-        logging.info("Fertig: %s Aktivität(en) geändert%s.", changed, " (Dry-Run)" if config["dry_run"] else "")
+        logging.info("Finished: %s activit%s changed%s.", changed, "y" if changed == 1 else "ies", " (Dry run)" if config["dry_run"] else "")
         return 0
     except (RuntimeError, ValueError) as exc:
         logging.error("%s", exc)

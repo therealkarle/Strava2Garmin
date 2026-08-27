@@ -14,23 +14,23 @@ def main() -> None:
     try:
         from garminconnect import Garmin
     except ImportError as exc:
-        raise SystemExit("python-garminconnect fehlt; zuerst pip install -r requirements.txt ausführen.") from exc
+        raise SystemExit("python-garminconnect is missing; run pip install -r requirements.txt first.") from exc
 
-    email = input("Garmin-E-Mail: ").strip()
-    password = getpass.getpass("Garmin-Passwort: ")
+    email = input("Garmin email: ").strip()
+    password = getpass.getpass("Garmin password: ")
 
     def prompt_mfa() -> str:
-        return input("Garmin-MFA-Code: ").strip()
+        return input("Garmin MFA code: ").strip()
 
     APP_DIR.mkdir(parents=True, exist_ok=True)
     client = Garmin(email, password, prompt_mfa=prompt_mfa)
     try:
         mfa_required, _ = client.login(tokenstore=str(TOKEN_DIR))
         if mfa_required:
-            raise RuntimeError("MFA wurde nicht abgeschlossen.")
+            raise RuntimeError("MFA was not completed.")
     except Exception as exc:
-        raise SystemExit(f"Garmin-Anmeldung fehlgeschlagen: {exc}") from exc
-    print(f"Garmin-Token gespeichert: {TOKEN_DIR}")
+        raise SystemExit(f"Garmin login failed: {exc}") from exc
+    print(f"Garmin token saved: {TOKEN_DIR}")
 
 
 if __name__ == "__main__":
