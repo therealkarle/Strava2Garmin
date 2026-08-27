@@ -5,6 +5,8 @@ from sync import (
     apply_overrides,
     build_updates,
     find_match,
+    load_strava_activities,
+    set_activity_description,
     parse_args,
 )
 
@@ -59,6 +61,72 @@ def test_cli_overrides_config_values():
         "log_level": "DEBUG",
         "dry_run": True,
     }
+
+
+def test_load_strava_activities_reads_description_from_activity_detail(monkeypatch):
+    responses = iter([
+        [{"id": 42, "start_date": "2026-08-27T10:00:00Z", "sport_type": "Run", "name": "Morning run"}],
+        {"description": "Great run"},
+    ])
+    monkeypatch.setattr("sync._strava_token", lambda: "token")
+    monkeypatch.setattr("sync._json_request", lambda *args, **kwargs: next(responses))
+
+    activities = load_strava_activities(1)
+
+    assert activities[0].description == "Great run"
+
+
+def test_set_activity_description_uses_garmin_activity_endpoint():
+    calls = []
+
+    class Client:
+        def put(self, *args, **kwargs):
+            calls.append((args, kwargs))
+
+    class Garmin:
+        client = Client()
+        garmin_connect_activity = "/activity-service/activity"
+
+    set_activity_description(Garmin(), "42", "Great run")
+
+    assert calls == [
+        (("connectapi", "/activity-service/activity/42"), {
+            "json": {"activityId": "42", "description": "Great run"},
+            "api": True,
+        })
+    ]
+
+
+def test_set_activity_description_limits_text_to_garmin_maximum():
+    payload = {}
+
+    class Client:
+        def put(self, *args, **kwargs):
+            payload.update(kwargs["json"])
+
+    class Garmin:
+        client = Client()
+        garmin_connect_activity = "/activity-service/activity"
+
+    set_activity_description(Garmin(), "42", "x" * 2001)
+
+    assert payload["description"] == "x" * 2000
+
+
+def test_set_activity_description_counts_non_bmp_characters_as_two_units():
+    payload = {}
+
+    class Client:
+        def put(self, *args, **kwargs):
+            payload.update(kwargs["json"])
+
+    class Garmin:
+        client = Client()
+        garmin_connect_activity = "/activity-service/activity"
+
+    set_activity_description(Garmin(), "42", "x" * 1998 + "𝘀" * 3)
+
+    assert len(payload["description"].encode("utf-16-le")) // 2 == 2000
 
 
 def test_build_updates_only_returns_changed_fields():

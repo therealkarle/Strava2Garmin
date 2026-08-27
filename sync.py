@@ -26,6 +26,7 @@ APP_DIR = Path(os.environ.get("APPDATA", Path.home())) / "Strava2Garmin"
 STRAVA_TOKEN_FILE = APP_DIR / "strava-token.json"
 GARMIN_TOKEN_DIR = APP_DIR / "garmin-tokens"
 STRAVA_API = "https://www.strava.com/api/v3"
+GARMIN_DESCRIPTION_MAX_LENGTH = 2000
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,24 @@ def build_updates(source: Activity, target: Activity, *, overwrite: bool) -> lis
     return updates
 
 
+def set_activity_description(garmin: Any, activity_id: str, description: str) -> Any:
+    units = 0
+    limited_description = []
+    for char in description:
+        char_units = 2 if ord(char) > 0xFFFF else 1
+        if units + char_units > GARMIN_DESCRIPTION_MAX_LENGTH:
+            break
+        limited_description.append(char)
+        units += char_units
+    description = "".join(limited_description)
+    return garmin.client.put(
+        "connectapi",
+        f"{garmin.garmin_connect_activity}/{activity_id}",
+        json={"activityId": activity_id, "description": description},
+        api=True,
+    )
+
+
 def _json_request(url: str, *, token: str, method: str = "GET", data: bytes | None = None) -> Any:
     request = urllib.request.Request(url, data=data, method=method)
     request.add_header("Authorization", f"Bearer {token}")
@@ -180,7 +199,11 @@ def load_strava_activities(limit: int) -> list[Activity]:
             start_time=parse_time(row["start_date"]),
             sport=row.get("sport_type") or row.get("type", ""),
             name=row.get("name") or "",
-            description=row.get("description") or "",
+            description=(
+                row.get("description")
+                or _json_request(f"{STRAVA_API}/activities/{row['id']}", token=token).get("description")
+                or ""
+            ),
         )
         for row in rows[:limit]
     ]
@@ -240,7 +263,7 @@ def sync(config: dict[str, Any]) -> int:
                 if label == "Name":
                     garmin.set_activity_name(target.id, value)
                 else:
-                    garmin.set_activity_description(target.id, value)
+                    set_activity_description(garmin, target.id, value)
         changed += 1
     return changed
 

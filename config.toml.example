@@ -1,6 +1,6 @@
 # Copy to config.toml and adjust as needed.
 limit = 10
-match_tolerance_minutes = 5
+match_tolerance_minutes = 0
 # If true, match only by start time. Useful when Garmin and Strava use different sport keys.
 ignore_sport_type = true
 overwrite = true
