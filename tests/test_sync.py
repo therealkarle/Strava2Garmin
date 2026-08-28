@@ -330,3 +330,42 @@ def test_build_updates_skips_matching_garmin_event_type():
     source = activity("s1", "2026-08-27T10:00:00+00:00", workout_type=3)
     target = activity("g1", "2026-08-27T10:00:00+00:00", event_type="training")
     assert build_updates(source, target, overwrite=False, sync_event_type=True) == []
+
+
+def test_manual_sync_defaults_to_date_range_and_today(monkeypatch):
+    import manual_sync
+
+    answers = iter(["", "2026-08-01", ""])
+    calls = []
+    monkeypatch.setattr(manual_sync.sync, "main", lambda args: calls.append(args) or 0)
+
+    assert manual_sync.main(input_func=lambda _: next(answers), today=dt.date(2026, 8, 28)) == 0
+    assert calls == [["--config", str(Path("config.toml").resolve()), "--start-date", "2026-08-01", "--end-date", "2026-08-28"]]
+
+
+def test_manual_sync_uses_config_limit_when_recent_count_is_blank(monkeypatch):
+    import manual_sync
+
+    answers = iter(["n", ""])
+    calls = []
+    monkeypatch.setattr(manual_sync, "load_config", lambda _: {"limit": 7})
+    monkeypatch.setattr(manual_sync.sync, "main", lambda args: calls.append(args) or 0)
+
+    assert manual_sync.main(input_func=lambda _: next(answers)) == 0
+    assert calls == [["--config", str(Path("config.toml").resolve()), "--limit", "7"]]
+
+
+def test_manual_sync_reprompts_for_invalid_dates_and_counts(monkeypatch):
+    import manual_sync
+
+    answers = iter(["", "01.08.2026", "2026-08-01", "bad", "", "n", "0", "3"])
+    calls = []
+    monkeypatch.setattr(manual_sync.sync, "main", lambda args: calls.append(args) or 0)
+
+    manual_sync.main(input_func=lambda _: next(answers), today=dt.date(2026, 8, 28))
+    manual_sync.main(input_func=lambda _: next(answers))
+
+    assert calls == [
+        ["--config", str(Path("config.toml").resolve()), "--start-date", "2026-08-01", "--end-date", "2026-08-28"],
+        ["--config", str(Path("config.toml").resolve()), "--limit", "3"],
+    ]
