@@ -40,16 +40,16 @@ def _ask_limit(input_func: Callable[[str], str], default: int) -> int:
 
 def main(input_func: Callable[[str], str] = input, today: dt.date | None = None) -> int:
     today = today or dt.date.today()
-    mode = input_func("Use date range mode? [Y/n]: ").strip().lower()
+    mode = input_func("Select mode: [D]ate range / [N] recent activities (default D): ").strip().lower()
     arguments = ["--config", str(CONFIG_PATH)]
-    if mode in ("", "y", "yes"):
+    if mode in ("", "d"):
         start_date = _ask_date("Start date (YYYY-MM-DD): ", input_func)
         end_date = _ask_date("End date (YYYY-MM-DD, blank for today): ", input_func, allow_empty=True) or today
         arguments.extend(("--start-date", start_date.isoformat(), "--end-date", end_date.isoformat()))
     elif mode == "n":
         arguments.extend(("--limit", str(_ask_limit(input_func, load_config(CONFIG_PATH)["limit"]))))
     else:
-        print("Enter Y for date range mode or N for recent activities.")
+        print("Enter D for date range mode or N for recent activities.")
         return main(input_func, today)
     return sync.main(arguments)
 

@@ -343,6 +343,18 @@ def test_manual_sync_defaults_to_date_range_and_today(monkeypatch):
     assert calls == [["--config", str(Path("config.toml").resolve()), "--start-date", "2026-08-01", "--end-date", "2026-08-28"]]
 
 
+def test_manual_sync_accepts_date_range_mode_selection(monkeypatch):
+    import manual_sync
+
+    answers = iter(["d", "2026-08-01", ""])
+    calls = []
+    monkeypatch.setattr(manual_sync.sync, "main", lambda args: calls.append(args) or 0)
+
+    manual_sync.main(input_func=lambda _: next(answers), today=dt.date(2026, 8, 28))
+
+    assert calls == [["--config", str(Path("config.toml").resolve()), "--start-date", "2026-08-01", "--end-date", "2026-08-28"]]
+
+
 def test_manual_sync_uses_config_limit_when_recent_count_is_blank(monkeypatch):
     import manual_sync
 
