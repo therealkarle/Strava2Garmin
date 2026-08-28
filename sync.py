@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 try:
     import tomllib
@@ -189,6 +189,8 @@ def set_activity_description(garmin: Any, activity_id: str, description: str) ->
 def translate_event_type(workout_type: int | None, commute: bool = False) -> str | None:
     if commute:
         return "Verkehrsmittel"
+    if workout_type is None:
+        return None
     return {1: "Wettkampf", 2: "Training", 3: "Training"}.get(workout_type)
 
 
@@ -224,7 +226,7 @@ def _json_request(url: str, *, token: str, method: str = "GET", data: bytes | No
 
 def _strava_token() -> str:
     try:
-        token = json.loads(STRAVA_TOKEN_FILE.read_text(encoding="utf-8"))
+        token: dict[str, Any] = json.loads(STRAVA_TOKEN_FILE.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError) as exc:
         raise RuntimeError("Strava is not configured; run setup_strava.py first.") from exc
     if token.get("expires_at", 0) <= int(time.time()) and token.get("refresh_token"):
@@ -283,7 +285,10 @@ def load_garmin_activities(limit: int) -> tuple[Any, list[Activity]]:
     client = Garmin()
     try:
         client.login(tokenstore=str(GARMIN_TOKEN_DIR))
-        rows = client.get_activities(0, limit)
+        raw_rows = client.get_activities(0, limit)
+        if not isinstance(raw_rows, list):
+            raise RuntimeError("Garmin returned an invalid activity list.")
+        rows = cast(list[dict[str, Any]], raw_rows)
     except Exception as exc:
         raise RuntimeError("Garmin login/API failed; run setup_garmin.py again or try later.") from exc
     activities = [
