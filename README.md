@@ -21,7 +21,13 @@ Strava requires an API application with `http://localhost:8765/callback` configu
 py sync.py --dry-run
 py sync.py --limit 5
 py sync.py --match-tolerance 10 --log-level DEBUG
+py sync.py --start-date 2026-08-01 --end-date 2026-08-28
+py sync.py --start-date 2026-08-01
 ```
+
+Date ranges are inclusive and use UTC calendar dates. If `--end-date` is omitted, today is used. Without `--start-date`, the existing recent-activity `limit` behavior is unchanged.
+
+Temporary Garmin/Cloudflare HTTP 504 errors are retried up to two times using Garmin's `retry_after` delay.
 
 A Strava activity is matched to exactly one Garmin activity by start time and sport. With `ignore_sport_type = true`, the sport is ignored and only the start time is used. Ambiguous matches are skipped. Use `--no-overwrite` to protect existing Garmin text.
 

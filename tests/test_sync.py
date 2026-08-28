@@ -11,6 +11,8 @@ from sync import (
     set_activity_description,
     set_activity_event_type,
     parse_args,
+    parse_date,
+    with_garmin_retry,
     translate_event_type,
 )
 
@@ -67,6 +69,71 @@ def test_cli_overrides_config_values():
     }
 
 
+def test_cli_accepts_inclusive_date_range(monkeypatch):
+    args = parse_args(["--start-date", "2026-08-01"])
+
+    result = apply_overrides({"limit": 10, "match_tolerance_minutes": 5}, args)
+
+    assert result["start_date"] == dt.date(2026, 8, 1)
+    assert result["end_date"] == dt.date.today()
+
+
+def test_cli_rejects_end_date_without_start_date():
+    args = parse_args(["--end-date", "2026-08-28"])
+
+    try:
+        apply_overrides({"limit": 10, "match_tolerance_minutes": 5}, args)
+    except ValueError as exc:
+        assert str(exc) == "--end-date requires --start-date."
+    else:
+        raise AssertionError("expected end-date validation error")
+
+
+def test_parse_date_requires_iso_calendar_date():
+    assert parse_date("2026-08-28") == dt.date(2026, 8, 28)
+    try:
+        parse_date("28.08.2026")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected invalid date error")
+
+
+def test_with_garmin_retry_retries_504_using_retry_after(monkeypatch):
+    attempts = []
+    sleeps = []
+
+    def operation():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("API Error 504 - {'retry_after': 120}")
+        return "ok"
+
+    monkeypatch.setattr("sync.time.sleep", sleeps.append)
+
+    assert with_garmin_retry(operation) == "ok"
+    assert len(attempts) == 2
+    assert sleeps == [120]
+
+
+def test_with_garmin_retry_does_not_retry_other_errors(monkeypatch):
+    attempts = []
+
+    def operation():
+        attempts.append(1)
+        raise RuntimeError("API Error 401")
+
+    monkeypatch.setattr("sync.time.sleep", lambda _: (_ for _ in ()).throw(AssertionError("unexpected sleep")))
+
+    try:
+        with_garmin_retry(operation)
+    except RuntimeError as exc:
+        assert str(exc) == "API Error 401"
+    else:
+        raise AssertionError("expected Garmin error")
+    assert len(attempts) == 1
+
+
 def test_load_strava_activities_reads_description_from_activity_detail(monkeypatch):
     responses = iter([
         [{"id": 42, "start_date": "2026-08-27T10:00:00Z", "sport_type": "Run", "name": "Morning run"}],
@@ -78,6 +145,25 @@ def test_load_strava_activities_reads_description_from_activity_detail(monkeypat
     activities = load_strava_activities(1)
 
     assert activities[0].description == "Great run"
+
+
+def test_load_strava_activities_filters_inclusive_date_range(monkeypatch):
+    requests = []
+    monkeypatch.setattr("sync._strava_token", lambda: "token")
+
+    def request(url, **kwargs):
+        requests.append(url)
+        return [
+            {"id": 1, "start_date": "2026-08-01T00:00:00Z", "sport_type": "Run", "name": "first", "description": "desc"},
+            {"id": 2, "start_date": "2026-08-03T00:00:00Z", "sport_type": "Run", "name": "last", "description": "desc"},
+        ]
+
+    monkeypatch.setattr("sync._json_request", request)
+
+    activities = load_strava_activities(10, dt.date(2026, 8, 1), dt.date(2026, 8, 2))
+
+    assert [item.id for item in activities] == ["1"]
+    assert "after=" in requests[0] and "before=" in requests[0]
 
 
 def test_set_activity_description_uses_garmin_activity_endpoint():

@@ -7,6 +7,7 @@ import datetime as dt
 import json
 import logging
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -32,6 +33,7 @@ GARMIN_EVENT_TYPES = {
     "Training": {"typeId": 4, "typeKey": "training"},
     "Verkehrsmittel": {"typeId": 5, "typeKey": "transportation"},
 }
+GARMIN_RETRY_ATTEMPTS = 3
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("config.toml"))
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--start-date", type=parse_date)
+    parser.add_argument("--end-date", type=parse_date)
     parser.add_argument("--match-tolerance", type=int, dest="match_tolerance_minutes")
     overwrite = parser.add_mutually_exclusive_group()
     overwrite.add_argument("--overwrite", action="store_true", default=None)
@@ -92,6 +96,13 @@ def apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> dict[st
         if value is not None:
             result[key] = value
     result["dry_run"] = bool(args.dry_run)
+    if args.end_date is not None and args.start_date is None:
+        raise ValueError("--end-date requires --start-date.")
+    if args.start_date is not None:
+        result["start_date"] = args.start_date
+        result["end_date"] = args.end_date or dt.date.today()
+        if result["end_date"] < result["start_date"]:
+            raise ValueError("--end-date must not be before --start-date.")
     if result["limit"] < 1 or result["match_tolerance_minutes"] < 0:
         raise ValueError("limit must be positive and match_tolerance_minutes must not be negative.")
     return result
@@ -100,6 +111,32 @@ def apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> dict[st
 def parse_time(value: str) -> dt.datetime:
     parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+
+
+def parse_date(value: str) -> dt.date:
+    return dt.date.fromisoformat(value)
+
+
+def with_garmin_retry(operation: Any) -> Any:
+    for attempt in range(GARMIN_RETRY_ATTEMPTS):
+        try:
+            return operation()
+        except Exception as exc:
+            match = re.search(r"API Error 504.*['\"]retry_after['\"]:\s*(\d+)", str(exc))
+            if match is None or attempt == GARMIN_RETRY_ATTEMPTS - 1:
+                raise
+            delay = int(match.group(1))
+            logging.warning("Garmin returned HTTP 504; retrying in %s seconds.", delay)
+            time.sleep(delay)
+    raise AssertionError("unreachable")
+
+
+def _in_date_range(value: dt.datetime, start_date: dt.date | None, end_date: dt.date | None) -> bool:
+    if start_date is None:
+        return True
+    start = dt.datetime.combine(start_date, dt.time.min, tzinfo=dt.timezone.utc)
+    end = dt.datetime.combine(end_date or dt.date.today(), dt.time.max, tzinfo=dt.timezone.utc)
+    return start <= value.astimezone(dt.timezone.utc) <= end
 
 
 def normalize_sport(value: str | None) -> str:
@@ -183,11 +220,13 @@ def set_activity_description(garmin: Any, activity_id: str, description: str) ->
         limited_description.append(char)
         units += char_units
     description = "".join(limited_description)
-    return garmin.client.put(
-        "connectapi",
-        f"{garmin.garmin_connect_activity}/{activity_id}",
-        json={"activityId": activity_id, "description": description},
-        api=True,
+    return with_garmin_retry(
+        lambda: garmin.client.put(
+            "connectapi",
+            f"{garmin.garmin_connect_activity}/{activity_id}",
+            json={"activityId": activity_id, "description": description},
+            api=True,
+        )
     )
 
 
@@ -204,11 +243,13 @@ def set_activity_event_type(garmin: Any, activity_id: str, event_type: str) -> A
         event_type_dto = GARMIN_EVENT_TYPES[event_type]
     except KeyError as exc:
         raise ValueError(f"Unsupported Garmin event type: {event_type}") from exc
-    return garmin.client.put(
-        "connectapi",
-        f"{garmin.garmin_connect_activity}/{activity_id}",
-        json={"activityId": activity_id, "eventTypeDTO": event_type_dto},
-        api=True,
+    return with_garmin_retry(
+        lambda: garmin.client.put(
+            "connectapi",
+            f"{garmin.garmin_connect_activity}/{activity_id}",
+            json={"activityId": activity_id, "eventTypeDTO": event_type_dto},
+            api=True,
+        )
     )
 
 
@@ -258,29 +299,50 @@ def _strava_token() -> str:
         raise RuntimeError("Strava token is incomplete; run setup_strava.py again.") from exc
 
 
-def load_strava_activities(limit: int) -> list[Activity]:
+def load_strava_activities(
+    limit: int,
+    start_date: dt.date | None = None,
+    end_date: dt.date | None = None,
+) -> list[Activity]:
     token = _strava_token()
-    query = urllib.parse.urlencode({"per_page": limit, "page": 1})
-    rows = _json_request(f"{STRAVA_API}/athlete/activities?{query}", token=token)
-    return [
-        Activity(
-            id=str(row["id"]),
-            start_time=parse_time(row["start_date"]),
-            sport=row.get("sport_type") or row.get("type", ""),
-            name=row.get("name") or "",
-            description=(
-                row.get("description")
-                or _json_request(f"{STRAVA_API}/activities/{row['id']}", token=token).get("description")
-                or ""
-            ),
-            workout_type=row.get("workout_type"),
-            commute=bool(row.get("commute")),
-        )
-        for row in rows[:limit]
-    ]
+    page = 1
+    activities = []
+    while True:
+        params: dict[str, int] = {"per_page": limit, "page": page}
+        if start_date is not None:
+            start = dt.datetime.combine(start_date, dt.time.min, tzinfo=dt.timezone.utc)
+            end = dt.datetime.combine(end_date or dt.date.today(), dt.time.min, tzinfo=dt.timezone.utc) + dt.timedelta(days=1)
+            params.update(after=int(start.timestamp()) - 1, before=int(end.timestamp()))
+        rows = _json_request(f"{STRAVA_API}/athlete/activities?{urllib.parse.urlencode(params)}", token=token)
+        if not rows:
+            break
+        for row in rows:
+            activity = Activity(
+                id=str(row["id"]),
+                start_time=parse_time(row["start_date"]),
+                sport=row.get("sport_type") or row.get("type", ""),
+                name=row.get("name") or "",
+                description=(
+                    row.get("description")
+                    or _json_request(f"{STRAVA_API}/activities/{row['id']}", token=token).get("description")
+                    or ""
+                ),
+                workout_type=row.get("workout_type"),
+                commute=bool(row.get("commute")),
+            )
+            if _in_date_range(activity.start_time, start_date, end_date):
+                activities.append(activity)
+        if start_date is None or len(rows) < limit:
+            break
+        page += 1
+    return activities[:limit] if start_date is None else activities
 
 
-def load_garmin_activities(limit: int) -> tuple[Any, list[Activity]]:
+def load_garmin_activities(
+    limit: int,
+    start_date: dt.date | None = None,
+    end_date: dt.date | None = None,
+) -> tuple[Any, list[Activity]]:
     try:
         from garminconnect import Garmin
     except ImportError as exc:
@@ -290,10 +352,20 @@ def load_garmin_activities(limit: int) -> tuple[Any, list[Activity]]:
     client = Garmin()
     try:
         client.login(tokenstore=str(GARMIN_TOKEN_DIR))
-        raw_rows = client.get_activities(0, limit)
-        if not isinstance(raw_rows, list):
-            raise RuntimeError("Garmin returned an invalid activity list.")
-        rows = cast(list[dict[str, Any]], raw_rows)
+        offset = 0
+        rows: list[dict[str, Any]] = []
+        while True:
+            raw_rows = client.get_activities(offset, limit)
+            if not isinstance(raw_rows, list):
+                raise RuntimeError("Garmin returned an invalid activity list.")
+            page = cast(list[dict[str, Any]], raw_rows)
+            rows.extend(page)
+            if start_date is None or len(page) < limit:
+                break
+            parsed_times = [parse_time(row.get("startTimeGMT") or row["startTimeLocal"]) for row in page if row.get("startTimeGMT") or row.get("startTimeLocal")]
+            if parsed_times and min(parsed_times).astimezone(dt.timezone.utc) < dt.datetime.combine(start_date, dt.time.min, tzinfo=dt.timezone.utc):
+                break
+            offset += limit
     except Exception as exc:
         raise RuntimeError("Garmin login/API failed; run setup_garmin.py again or try later.") from exc
     activities = [
@@ -306,14 +378,16 @@ def load_garmin_activities(limit: int) -> tuple[Any, list[Activity]]:
             event_type=((row.get("eventType") or {}).get("typeKey") or ""),
         )
         for row in rows
-        if row.get("activityId") is not None and (row.get("startTimeGMT") or row.get("startTimeLocal"))
+        if row.get("activityId") is not None
+        and (row.get("startTimeGMT") or row.get("startTimeLocal"))
+        and _in_date_range(parse_time(row.get("startTimeGMT") or row["startTimeLocal"]), start_date, end_date)
     ]
     return client, activities
 
 
 def sync(config: dict[str, Any]) -> int:
-    strava = load_strava_activities(config["limit"])
-    garmin, targets = load_garmin_activities(config["limit"])
+    strava = load_strava_activities(config["limit"], config.get("start_date"), config.get("end_date"))
+    garmin, targets = load_garmin_activities(config["limit"], config.get("start_date"), config.get("end_date"))
     changed = 0
     for source in strava:
         target = find_match(
@@ -341,7 +415,7 @@ def sync(config: dict[str, Any]) -> int:
         if not config["dry_run"]:
             for label, value in updates:
                 if label == "Name":
-                    garmin.set_activity_name(target.id, value)
+                    with_garmin_retry(lambda: garmin.set_activity_name(target.id, value))
                 elif label == "Description":
                     set_activity_description(garmin, target.id, value)
                 else:
