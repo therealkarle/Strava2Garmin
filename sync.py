@@ -154,8 +154,13 @@ def build_updates(
             updates.append(("Name", source.name))
     description = target.description
     if overwrite or not target.description:
+        old_name = target.name
+        marker = "\n\nOldGarminName: "
+        _, separator, existing_old_name = target.description.rpartition(marker)
+        if separator:
+            old_name = existing_old_name
         description = (
-            _description_with_old_name(source.description, target.name)
+            _description_with_old_name(source.description, old_name)
             if add_old_garmin_name
             else source.description
         )

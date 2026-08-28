@@ -178,6 +178,18 @@ def test_build_updates_preserves_old_garmin_name_at_end_of_description():
         add_old_garmin_name=True,
     ) == [("Description", "Strava description\n\nOldGarminName: Old Garmin name")]
 
+def test_build_updates_does_not_replace_existing_old_garmin_name():
+    source = activity("s1", "2026-08-27T10:00:00+00:00", name="New Garmin name", description="Strava description")
+    target = activity(
+        "g1",
+        "2026-08-27T10:00:00+00:00",
+        name="New Garmin name",
+        description="Strava description\n\nOldGarminName: Original Garmin name",
+    )
+
+    assert build_updates(source, target, overwrite=True, add_old_garmin_name=True) == []
+
+
 def test_old_garmin_name_takes_priority_over_description_limit():
     source = activity("s1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="x" * 2000)
     target = activity("g1", "2026-08-27T10:00:00+00:00", name="Old Garmin name", description="")
