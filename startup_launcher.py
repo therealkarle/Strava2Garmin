@@ -27,6 +27,7 @@ def main() -> int:
     project_directory = Path(__file__).resolve().parent
     config_path = project_directory / "config.toml"
     delay = load_startup_delay(config_path)
+    print(f"Waiting {delay} minute(s) before starting sync.", flush=True)
     if delay:
         time.sleep(delay * 60)
     return subprocess.run(
