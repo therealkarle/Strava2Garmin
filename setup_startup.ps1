@@ -3,6 +3,25 @@ param(
     [string]$ProjectDirectory = $PSScriptRoot
 )
 
+$principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $elevationArguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "`"$PSCommandPath`"",
+        "-Python", "`"$Python`"",
+        "-ProjectDirectory", "`"$ProjectDirectory`""
+    )
+
+    try {
+        Start-Process -FilePath (Get-Process -Id $PID).Path -Verb RunAs -ArgumentList $elevationArguments
+    }
+    catch {
+        Write-Error "Administrator approval was not granted."
+    }
+    return
+}
+
 $taskName = "Strava2Garmin Sync"
 $scriptPath = Join-Path $ProjectDirectory "startup_launcher.py"
 $arguments = "`"$scriptPath`""
