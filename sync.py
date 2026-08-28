@@ -56,7 +56,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     overwrite.add_argument("--no-overwrite", action="store_false", dest="overwrite")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--add-old-garmin-name-to-description", action="store_true", default=None)
-    parser.add_argument("--startup-delay", type=int, dest="startup_delay_minutes")
     parser.add_argument("--log-level", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     return parser.parse_args(argv)
 
@@ -77,7 +76,6 @@ def load_config(path: Path) -> dict[str, Any]:
     config.setdefault("add_old_garmin_name_to_description", False)
     config.setdefault("sync_event_type", False)
     config.setdefault("overwrite", True)
-    config.setdefault("startup_delay_minutes", 0)
     config.setdefault("log_level", "INFO")
     config["dry_run"] = False
     if not isinstance(config["limit"], int) or config["limit"] < 1:
@@ -89,7 +87,7 @@ def load_config(path: Path) -> dict[str, Any]:
 
 def apply_overrides(config: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     result = dict(config)
-    for key in ("limit", "match_tolerance_minutes", "overwrite", "startup_delay_minutes", "log_level", "add_old_garmin_name_to_description"):
+    for key in ("limit", "match_tolerance_minutes", "overwrite", "log_level", "add_old_garmin_name_to_description"):
         value = getattr(args, key, None)
         if value is not None:
             result[key] = value
@@ -304,9 +302,6 @@ def load_garmin_activities(limit: int) -> tuple[Any, list[Activity]]:
 
 
 def sync(config: dict[str, Any]) -> int:
-    if config["startup_delay_minutes"]:
-        logging.info("Waiting %s minutes before starting.", config["startup_delay_minutes"])
-        time.sleep(config["startup_delay_minutes"] * 60)
     strava = load_strava_activities(config["limit"])
     garmin, targets = load_garmin_activities(config["limit"])
     changed = 0

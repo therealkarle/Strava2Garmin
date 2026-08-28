@@ -52,7 +52,6 @@ def test_cli_overrides_config_values():
         "limit": 10,
         "match_tolerance_minutes": 5,
         "overwrite": True,
-        "startup_delay_minutes": 10,
         "log_level": "INFO",
     }
     args = parse_args(["--limit", "2", "--no-overwrite", "--dry-run", "--log-level", "DEBUG"])
@@ -63,7 +62,6 @@ def test_cli_overrides_config_values():
         "limit": 2,
         "match_tolerance_minutes": 5,
         "overwrite": False,
-        "startup_delay_minutes": 10,
         "log_level": "DEBUG",
         "dry_run": True,
     }

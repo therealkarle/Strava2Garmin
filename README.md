@@ -33,4 +33,4 @@ Set `sync_event_type = true` to optionally copy Strava classifications to Garmin
 powershell -ExecutionPolicy Bypass -File .\setup_startup.ps1
 ```
 
-The task starts when Windows logs in; `startup_delay_minutes` in `config.toml` delays the actual sync.
+The task starts when Windows logs in; `startup_launcher.py` applies `startup_delay_minutes` from `config.toml` before starting the sync. Running `sync.py` manually starts immediately.
