@@ -415,7 +415,8 @@ def sync(config: dict[str, Any]) -> int:
         if not config["dry_run"]:
             for label, value in updates:
                 if label == "Name":
-                    with_garmin_retry(lambda: garmin.set_activity_name(target.id, value))
+                    activity_id = target.id
+                    with_garmin_retry(lambda: garmin.set_activity_name(activity_id, value))
                 elif label == "Description":
                     set_activity_description(garmin, target.id, value)
                 else:
