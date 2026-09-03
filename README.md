@@ -16,7 +16,7 @@ The script only changes activities that need updating. It does not create, uploa
 Each Strava activity is matched with one existing Garmin activity by:
 
 1. Start time, within the configured tolerance.
-2. Sport type, unless `ignore_sport_type = true`.
+2. Sport type, unless `ignore_sport_type = true` (recomended).
 
 Ambiguous matches and activities without exactly one Garmin match are skipped. Use `--dry-run` to inspect proposed changes before updating Garmin.
 
@@ -178,13 +178,22 @@ Synchronizes Strava activity metadata to Garmin Connect.
 
 `manual_sync.py` provides an interactive manual run. It lets you choose either an inclusive date range or a number of recent activities, validates entries, and then calls `sync.py`.
 
+#### `Strava2Garmin.bat`
+
 For a double-clickable launcher, use:
 
 ```powershell
 .\Strava2Garmin.bat
 ```
 
-The batch file starts the interactive manual script and keeps the window open afterward.
+The batch file provides a convenient Windows launcher that:
+
+- Changes to the script directory automatically (no need to navigate first)
+- Runs `manual_sync.py` for interactive sync options
+- Keeps the console window open after completion so you can review the results
+- Requires no command-line knowledge—just double-click to start
+
+This is the easiest way to run a manual sync on Windows without opening a terminal.
 
 ### `setup.bat`
 
